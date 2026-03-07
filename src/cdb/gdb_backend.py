@@ -354,6 +354,27 @@ class GdbBackend(Backend):
             return "step completed"
         return reason
 
+    def _get_thread_info(self, session):
+        """Query GDB for thread list. Returns (threads_list, selected_thread_id)."""
+        resp = session.mi.command("-thread-info")
+        if not _mi_result_ok(resp):
+            return [], None
+        _, kvs = _parse_mi_record(resp["result"])
+        threads = kvs.get("threads", [])
+        current_id = kvs.get("current-thread-id")
+        result = []
+        for t in threads:
+            if isinstance(t, dict):
+                thread = t.get("thread", t)
+                if isinstance(thread, dict):
+                    result.append({
+                        "thread_id": int(thread.get("id", 0)),
+                        "target_id": thread.get("target-id", ""),
+                        "state": thread.get("state", ""),
+                        "name": thread.get("name", ""),
+                    })
+        return result, int(current_id) if current_id else None
+
     def _build_crash_summary(self, session, stop_kvs=None):
         frames = self._get_backtrace(session)
         top = frames[0] if frames else None
@@ -362,8 +383,11 @@ class GdbBackend(Backend):
         if top:
             top["locals"] = locals_
 
+        threads, current_tid = self._get_thread_info(session)
+
         return {
             "process_state": "stopped",
+            "thread_id": current_tid,
             "stop_reason": session.stop_reason or "unknown",
             "signal": session.stop_signal,
             "crash_address": None,
@@ -371,7 +395,7 @@ class GdbBackend(Backend):
             "interpretation": self._interpret_stop(session, stop_kvs),
             "crashing_frame": top,
             "backtrace": frames,
-            "num_threads": 1,  # TODO: query thread count
+            "num_threads": len(threads) if threads else 1,
             "suggested_watchpoints": [],
         }
 
@@ -477,8 +501,59 @@ class GdbBackend(Backend):
         if err:
             return err
 
+        if params.get("all_threads"):
+            threads_info, _ = self._get_thread_info(s)
+            threads = []
+            for ti in threads_info:
+                tid = ti["thread_id"]
+                s.mi.command(f"-thread-select {tid}")
+                frames = self._get_backtrace(s)
+                threads.append({
+                    "thread_id": tid,
+                    "target_id": ti.get("target_id", ""),
+                    "state": ti.get("state", ""),
+                    "frames": frames,
+                })
+            return {"ok": True, "threads": threads}
+
         frames = self._get_backtrace(s)
         return {"ok": True, "frames": frames}
+
+    def cmd_select_thread(self, params):
+        s = self._get_session(params)
+        if isinstance(s, dict):
+            return s
+        err = self._require_stopped(s)
+        if err:
+            return err
+
+        thread_id = params.get("thread_id")
+        if thread_id is None:
+            return {"ok": False, "error": "missing_param", "detail": "thread_id is required"}
+        thread_id = int(thread_id)
+
+        resp = s.mi.command(f"-thread-select {thread_id}")
+        if not _mi_result_ok(resp):
+            threads_info, _ = self._get_thread_info(s)
+            available = [t["thread_id"] for t in threads_info]
+            return {
+                "ok": False, "error": "thread_not_found",
+                "detail": f"No thread with ID {thread_id}",
+                "available_thread_ids": available,
+            }
+
+        frames = self._get_backtrace(s)
+        top = frames[0] if frames else None
+        locals_ = self._get_locals(s, 0) if top else []
+        if top:
+            top["locals"] = locals_
+
+        return {
+            "ok": True,
+            "thread_id": thread_id,
+            "num_frames": len(frames),
+            "location": top,
+        }
 
     def cmd_inspect(self, params):
         s = self._get_session(params)
@@ -590,6 +665,43 @@ class GdbBackend(Backend):
         if condition:
             result["condition"] = condition
         return result
+
+    def cmd_delete_breakpoint(self, params):
+        s = self._get_session(params)
+        if isinstance(s, dict):
+            return s
+        bp_id = params.get("breakpoint_id")
+        if bp_id is None:
+            return {"ok": False, "error": "missing_param", "detail": "breakpoint_id is required"}
+        bp_id = int(bp_id)
+        s.mi.command(f"-break-delete {bp_id}")
+        s.breakpoints.pop(bp_id, None)
+        lp_id = s._log_bp_ids.pop(bp_id, None)
+        if lp_id is not None:
+            s.log_points.pop(lp_id, None)
+        return {"ok": True, "breakpoint_id": bp_id}
+
+    def cmd_disable_breakpoint(self, params):
+        s = self._get_session(params)
+        if isinstance(s, dict):
+            return s
+        bp_id = params.get("breakpoint_id")
+        if bp_id is None:
+            return {"ok": False, "error": "missing_param", "detail": "breakpoint_id is required"}
+        bp_id = int(bp_id)
+        s.mi.command(f"-break-disable {bp_id}")
+        return {"ok": True, "breakpoint_id": bp_id, "enabled": False}
+
+    def cmd_enable_breakpoint(self, params):
+        s = self._get_session(params)
+        if isinstance(s, dict):
+            return s
+        bp_id = params.get("breakpoint_id")
+        if bp_id is None:
+            return {"ok": False, "error": "missing_param", "detail": "breakpoint_id is required"}
+        bp_id = int(bp_id)
+        s.mi.command(f"-break-enable {bp_id}")
+        return {"ok": True, "breakpoint_id": bp_id, "enabled": True}
 
     def cmd_log_point(self, params):
         s = self._get_session(params)

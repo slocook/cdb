@@ -306,6 +306,7 @@ def _build_crash_summary(session):
 
     return {
         "process_state": _state_name(state),
+        "thread_id": crash_thread.GetThreadID(),
         "stop_reason": _stop_reason_name(reason),
         "signal": signal_name,
         "crash_address": crash_addr,
@@ -500,6 +501,47 @@ class LldbBackend(Backend):
             "frames": [_format_frame(t.GetFrameAtIndex(i)) for i in range(t.GetNumFrames())],
         }
 
+    def cmd_select_thread(self, params):
+        s = self._get_session(params)
+        if isinstance(s, dict):
+            return s
+        err = self._require_stopped(s)
+        if err:
+            return err
+
+        thread_id = params.get("thread_id")
+        if thread_id is None:
+            return {"ok": False, "error": "missing_param", "detail": "thread_id is required"}
+        thread_id = int(thread_id)
+
+        found = False
+        for i in range(s.process.GetNumThreads()):
+            t = s.process.GetThreadAtIndex(i)
+            if t.GetThreadID() == thread_id:
+                s.process.SetSelectedThread(t)
+                found = True
+                break
+
+        if not found:
+            available = [s.process.GetThreadAtIndex(i).GetThreadID()
+                         for i in range(s.process.GetNumThreads())]
+            return {
+                "ok": False, "error": "thread_not_found",
+                "detail": f"No thread with ID {thread_id}",
+                "available_thread_ids": available,
+            }
+
+        thread = s.process.GetSelectedThread()
+        frame = thread.GetFrameAtIndex(0)
+        result = {
+            "ok": True,
+            "thread_id": thread.GetThreadID(),
+            "stop_reason": _stop_reason_name(thread.GetStopReason()),
+            "num_frames": thread.GetNumFrames(),
+            "location": _format_frame(frame, detailed=True),
+        }
+        return result
+
     def cmd_inspect(self, params):
         s = self._get_session(params)
         if isinstance(s, dict):
@@ -644,6 +686,49 @@ class LldbBackend(Backend):
         if condition:
             result["condition"] = condition
         return result
+
+    def cmd_delete_breakpoint(self, params):
+        s = self._get_session(params)
+        if isinstance(s, dict):
+            return s
+        bp_id = params.get("breakpoint_id")
+        if bp_id is None:
+            return {"ok": False, "error": "missing_param", "detail": "breakpoint_id is required"}
+        bp_id = int(bp_id)
+        if not s.target.BreakpointDelete(bp_id):
+            return {"ok": False, "error": "breakpoint_not_found", "detail": f"No breakpoint with ID {bp_id}"}
+        s.breakpoints.pop(bp_id, None)
+        # Also clean up if it was a log point
+        lp_id = s._log_bp_ids.pop(bp_id, None)
+        if lp_id is not None:
+            s.log_points.pop(lp_id, None)
+        return {"ok": True, "breakpoint_id": bp_id}
+
+    def cmd_disable_breakpoint(self, params):
+        s = self._get_session(params)
+        if isinstance(s, dict):
+            return s
+        bp_id = params.get("breakpoint_id")
+        if bp_id is None:
+            return {"ok": False, "error": "missing_param", "detail": "breakpoint_id is required"}
+        bp = s.target.FindBreakpointByID(int(bp_id))
+        if not bp.IsValid():
+            return {"ok": False, "error": "breakpoint_not_found", "detail": f"No breakpoint with ID {bp_id}"}
+        bp.SetEnabled(False)
+        return {"ok": True, "breakpoint_id": int(bp_id), "enabled": False}
+
+    def cmd_enable_breakpoint(self, params):
+        s = self._get_session(params)
+        if isinstance(s, dict):
+            return s
+        bp_id = params.get("breakpoint_id")
+        if bp_id is None:
+            return {"ok": False, "error": "missing_param", "detail": "breakpoint_id is required"}
+        bp = s.target.FindBreakpointByID(int(bp_id))
+        if not bp.IsValid():
+            return {"ok": False, "error": "breakpoint_not_found", "detail": f"No breakpoint with ID {bp_id}"}
+        bp.SetEnabled(True)
+        return {"ok": True, "breakpoint_id": int(bp_id), "enabled": True}
 
     def cmd_log_point(self, params):
         s = self._get_session(params)

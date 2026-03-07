@@ -306,6 +306,35 @@ def cdb_get_logs(session_id: str, log_point_id: int = 0) -> str:
 
 
 @mcp.tool()
+def cdb_select_thread(session_id: str, thread_id: int) -> str:
+    """Switch the active thread for subsequent commands.
+
+    Use cdb_backtrace with all_threads=True to see all thread IDs.
+    After switching, commands like cdb_inspect, cdb_step, and cdb_backtrace
+    operate on the selected thread. Returns the thread's top frame with locals.
+    """
+    return _run("select_thread", session_id=session_id, thread_id=thread_id)
+
+
+@mcp.tool()
+def cdb_delete_breakpoint(session_id: str, breakpoint_id: int) -> str:
+    """Delete a breakpoint by its ID (returned by cdb_break_at or cdb_log_point)."""
+    return _run("delete_breakpoint", session_id=session_id, breakpoint_id=breakpoint_id)
+
+
+@mcp.tool()
+def cdb_disable_breakpoint(session_id: str, breakpoint_id: int) -> str:
+    """Disable a breakpoint without deleting it. Can be re-enabled later."""
+    return _run("disable_breakpoint", session_id=session_id, breakpoint_id=breakpoint_id)
+
+
+@mcp.tool()
+def cdb_enable_breakpoint(session_id: str, breakpoint_id: int) -> str:
+    """Re-enable a previously disabled breakpoint."""
+    return _run("enable_breakpoint", session_id=session_id, breakpoint_id=breakpoint_id)
+
+
+@mcp.tool()
 def cdb_go(session_id: str) -> str:
     """Continue execution until the next stop (breakpoint, watchpoint, crash, or exit).
 

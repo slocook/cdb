@@ -97,6 +97,18 @@ class Backend:
     def cmd_state(self, params):
         raise NotImplementedError
 
+    def cmd_select_thread(self, params):
+        raise NotImplementedError
+
+    def cmd_delete_breakpoint(self, params):
+        raise NotImplementedError
+
+    def cmd_disable_breakpoint(self, params):
+        raise NotImplementedError
+
+    def cmd_enable_breakpoint(self, params):
+        raise NotImplementedError
+
     def cmd_log_point(self, params):
         raise NotImplementedError
 
@@ -180,6 +192,10 @@ class Backend:
             "go": self.cmd_go,
             "step": self.cmd_step,
             "attach": self.cmd_attach,
+            "select_thread": self.cmd_select_thread,
+            "delete_breakpoint": self.cmd_delete_breakpoint,
+            "disable_breakpoint": self.cmd_disable_breakpoint,
+            "enable_breakpoint": self.cmd_enable_breakpoint,
             "state": self.cmd_state,
             "log_point": self.cmd_log_point,
             "get_logs": self.cmd_get_logs,

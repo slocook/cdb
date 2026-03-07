@@ -12,3 +12,4 @@ wheels/
 # Test generated files
 *.dSYM
 tests/crash_null
+tests/crash_threads

@@ -19,6 +19,7 @@ When investigating a crash, hang, or memory corruption in a compiled binary (C, 
 | Need to find who writes a variable | `cdb_watch` after stopping at a breakpoint |
 | Need to trace execution | `cdb_break_at` + `cdb_go` + `cdb_step` |
 | Need a variable's value | `cdb_inspect` |
+| Multithreaded crash — need to inspect other threads | `cdb_backtrace` with `all_threads=True`, then `cdb_select_thread` |
 | Need printf-style logging without recompiling | `cdb_log_point` + `cdb_go` + `cdb_get_logs` |
 
 ## Workflow
@@ -43,3 +44,5 @@ When investigating a crash, hang, or memory corruption in a compiled binary (C, 
 - Use `frame=N` on `cdb_inspect` and `cdb_watch` to evaluate in a caller frame (shown in backtrace)
 - `cdb_break_at` supports a `condition` parameter — the breakpoint only fires when the expression is true
 - `cdb_log_point` with empty `exprs` captures all local variables automatically
+- `crash_summary` includes `thread_id` and `num_threads` — use `cdb_select_thread` to switch threads in multithreaded programs
+- Use `cdb_delete_breakpoint`, `cdb_disable_breakpoint`, `cdb_enable_breakpoint` to manage breakpoints
