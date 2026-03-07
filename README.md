@@ -1,6 +1,6 @@
 # cdb
 
-AI-friendly debugger built on lldb. Designed to be the **first** tool an AI agent
+AI-friendly debugger built on lldb/gdb. Designed to be the **first** tool an AI agent
 reaches for when investigating a crash in a compiled binary — not grep, not reading source files.
 
 One command gets you from "I have a binary" to a structured crash report with the
