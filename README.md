@@ -409,26 +409,3 @@ attach pid → inspect locals → kill_session (detaches, process continues)
 launch (run_to_crash=false) → break_at function → go → inspect → step (repeating) → kill_session
 ```
 
----
-
-## Enterprise C++ notes
-
-**Separate debug symbols (.dSYM / split DWARF):** lldb loads `.dSYM` bundles
-automatically when they are adjacent to the binary (standard Xcode layout).
-For non-standard layouts, use `LLDB_DEBUGSERVER_PATH` or set the symbol search
-path in lldb before launching. Native support for `symbol_files` param is planned.
-
-**Large binaries:** Symbol loading time scales with binary size. `CreateTarget`
-and the first stop can take 30–90 seconds for multi-gigabyte DWARF. The current
-implementation has no timeout on this path — it will block until lldb is ready.
-
-**Remote debugging:** Not yet supported. Planned: `attach_remote` command using
-`lldb-server` / `gdbserver` protocol, enabling debugging on embedded devices or
-remote Linux hosts.
-
-**Core dumps (recommended for enterprise):** `attach_core` is instant regardless
-of binary size because symbol loading is lazy until addresses are actually resolved.
-This is the recommended workflow for CI crash triage.
-
-**Stripped binaries:** Work, but frame 0 locals will be missing and function names
-may be `??`. Provide the unstripped binary or `.dSYM` for meaningful output.
