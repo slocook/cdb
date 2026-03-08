@@ -69,28 +69,41 @@ class GdbMI:
                 break
             line = line.rstrip("\n")
             lines.append(line)
-            if line == "(gdb)":
+            if line.rstrip() == "(gdb)":
                 break
         return lines
 
     def _read_until_result(self, token):
-        """Read MI output until we get the result record for our token."""
+        """Read MI output until we get the result record for our token.
+
+        For async commands like -exec-run and -exec-continue, GDB emits ^running
+        followed by a (gdb) prompt before the target runs.  We must keep reading
+        past that first prompt until we also see a *stopped record so that callers
+        always get the stop information in a single response.
+        """
         records = []
         result = None
+        saw_stopped = False
         token_str = str(token)
         while True:
             line = self._proc.stdout.readline()
             if not line:
                 break
             line = line.rstrip("\n")
-            if line == "(gdb)":
+            # Linux gdb emits "(gdb) " (trailing space); strip before comparing.
+            if line.rstrip() == "(gdb)":
                 if result is not None:
-                    break
+                    # For ^running we must wait until *stopped arrives before
+                    # returning, otherwise callers miss the stop information.
+                    if "^running" not in result or saw_stopped:
+                        break
                 continue
             records.append(line)
             # Result record starts with our token number
             if line.startswith(token_str + "^"):
                 result = line
+            if line.startswith("*stopped"):
+                saw_stopped = True
         return {"result": result, "records": records}
 
     def kill(self):
@@ -315,7 +328,7 @@ class GdbBackend(Backend):
 
     def _get_locals(self, session, frame_idx=0):
         session.mi.command(f"-stack-select-frame {frame_idx}")
-        resp = session.mi.command("-stack-list-variables --all-values")
+        resp = session.mi.command("-stack-list-variables --simple-values")
         if not _mi_result_ok(resp):
             return []
         _, kvs = _parse_mi_record(resp["result"])
