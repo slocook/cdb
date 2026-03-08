@@ -20,6 +20,8 @@ else
 fi
 
 # Register MCP server (user scope = available in all projects)
+# Remove first so reinstalls and updates don't fail with "already exists".
+claude mcp remove --scope user cdb 2>/dev/null || true
 claude mcp add --scope user cdb -- \
   uv run --directory "$CDB_DIR" cdb-mcp
 
